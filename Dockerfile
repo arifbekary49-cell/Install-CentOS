@@ -5,17 +5,28 @@ ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
 # =========================================================
-# FIX CENTOS REPO (YOUR OLD STYLE BUT STABLE)
+# FIX CENTOS 7 REPO (NO 404 - VULTR CENTOS VAULT)
 # =========================================================
 RUN rm -rf /etc/yum.repos.d/* && \
-    curl -fsSL -o /etc/yum.repos.d/CentOS-Base.repo \
-    https://raw.githubusercontent.com/CentOS/sig-cloud-instance-images/CentOS-7/docker/centos-7.repo
+    cat > /etc/yum.repos.d/CentOS-Base.repo << 'EOF'
+[base]
+name=CentOS-7
+baseurl=http://vault.centos.org/7.9.2009/os/x86_64/
+enabled=1
+gpgcheck=0
 
-# =========================================================
-# FIX NETWORK (RAILWAY SAFE DNS)
-# =========================================================
-RUN echo "nameserver 1.1.1.1" > /etc/resolv.conf || true && \
-    echo "nameserver 8.8.8.8" >> /etc/resolv.conf || true
+[updates]
+name=CentOS-7-Updates
+baseurl=http://vault.centos.org/7.9.2009/updates/x86_64/
+enabled=1
+gpgcheck=0
+
+[extras]
+name=CentOS-7-Extras
+baseurl=http://vault.centos.org/7.9.2009/extras/x86_64/
+enabled=1
+gpgcheck=0
+EOF
 
 # =========================================================
 # YUM FIX
@@ -23,17 +34,16 @@ RUN echo "nameserver 1.1.1.1" > /etc/resolv.conf || true && \
 RUN yum clean all || true && yum makecache || true
 
 # =========================================================
-# CORE PACKAGES (MIXED FROM YOUR OLD STACK BUT SAFE)
+# CORE PACKAGES (STABLE ONLY)
 # =========================================================
 RUN yum install -y \
     curl wget git sudo bash \
     openssh-server openssh-clients \
     net-tools iproute procps-ng \
-    nano vim \
     || true
 
 # =========================================================
-# SSH FIX (FROM YOUR OLD CODE)
+# SSH SETUP
 # =========================================================
 RUN mkdir -p /var/run/sshd /etc/ssh && \
     ssh-keygen -A || true
@@ -47,7 +57,7 @@ UseDNS no
 EOF
 
 # =========================================================
-# WEB TERMINAL (FROM MODERN FIXES)
+# WEB TERMINAL (GOTTY)
 # =========================================================
 RUN curl -L \
     https://github.com/yudai/gotty/releases/latest/download/gotty_linux_amd64 \
@@ -55,29 +65,25 @@ RUN curl -L \
     chmod +x /usr/local/bin/gotty
 
 # =========================================================
-# FILE MANAGER (FULL ACCESS)
+# FILE MANAGER (FILEBROWSER)
 # =========================================================
 RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
 
 # =========================================================
-# SYSTEMCTL FIX (SAFE STUB FROM YOUR REQUEST)
+# SAFE SYSTEMCTL (NO CRASH)
 # =========================================================
-RUN echo -e '#!/bin/bash\necho "systemctl disabled in container mode"\nexit 0' > /usr/bin/systemctl && \
+RUN echo -e '#!/bin/bash\necho "systemctl disabled in container"\nexit 0' > /usr/bin/systemctl && \
     chmod +x /usr/bin/systemctl
 
 # =========================================================
-# START SCRIPT (MIX OF ALL YOUR OLD IDEAS)
+# START SCRIPT (ALL SERVICES)
 # =========================================================
 RUN cat > /start.sh << 'EOF'
 #!/bin/bash
 
 echo "===================================="
-echo " MIXED CENTOS VPS PANEL START"
+echo "  VPS PANEL STARTING (FIXED)"
 echo "===================================="
-
-# FIX DNS EVERY START (RAILWAY SAFE)
-echo "nameserver 1.1.1.1" > /etc/resolv.conf || true
-echo "nameserver 8.8.8.8" >> /etc/resolv.conf || true
 
 mkdir -p /var/run/sshd
 
@@ -89,11 +95,11 @@ echo "SSH READY -> root/root"
 filebrowser -r / -p 8081 --no-auth &
 echo "FILE ACCESS -> http://localhost:8081"
 
-# START TERMINAL
+# START WEB TERMINAL
 /usr/local/bin/gotty -p 8080 bash &
 echo "TERMINAL -> http://localhost:8080"
 
-echo "ALL SYSTEMS RUNNING (MIXED FIX MODE)"
+echo "SYSTEM RUNNING WITHOUT systemd ERRORS"
 
 tail -f /dev/null
 EOF
