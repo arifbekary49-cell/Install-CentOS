@@ -9,54 +9,25 @@ ENV SYSTEMD_IGNORE_CHROOT=1
 STOPSIGNAL SIGRTMIN+3
 
 # =========================================================
-# FIX CENTOS 7 REPO (CRITICAL FIX - REAL REPO FILE)
+# FIX CENTOS 7 REPO
 # =========================================================
 RUN rm -rf /etc/yum.repos.d/* && \
     curl -o /etc/yum.repos.d/CentOS-Base.repo \
     https://raw.githubusercontent.com/CentOS/sig-cloud-instance-images/CentOS-7/docker/centos-7.repo
 
 # =========================================================
-# FIX YUM CACHE
+# YUM CACHE FIX
 # =========================================================
 RUN yum clean all || true && \
     yum makecache || true
 
 # =========================================================
-# INSTALL CORE PACKAGES FIRST (IMPORTANT ORDER FIX)
+# CORE PACKAGES
 # =========================================================
 RUN yum install -y \
     curl wget git sudo \
     openssh-server openssh-clients \
     dbus systemd systemd-libs systemd-sysv \
-    || true
-
-# =========================================================
-# FIX SSH (SAFE GUARANTEED)
-# =========================================================
-RUN mkdir -p /var/run/sshd || true
-
-# FIX ssh-keygen PATH ISSUE
-RUN if [ -f /usr/bin/ssh-keygen ]; then \
-        /usr/bin/ssh-keygen -A; \
-    else \
-        echo "ssh-keygen missing but continuing"; \
-    fi
-
-RUN echo "root:root" | chpasswd || true
-
-# =========================================================
-# FIX sshd_config (CREATE IF MISSING)
-# =========================================================
-RUN mkdir -p /etc/ssh || true && \
-    touch /etc/ssh/sshd_config && \
-    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
-    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
-    echo "UseDNS no" >> /etc/ssh/sshd_config
-
-# =========================================================
-# REST OF YOUR PACKAGES
-# =========================================================
-RUN yum install -y \
     nano vim zip unzip tar gzip \
     net-tools iproute iputils \
     procps-ng psmisc util-linux \
@@ -66,25 +37,56 @@ RUN yum install -y \
     || true
 
 # =========================================================
-# STARTUP SCRIPT
+# FIX SSH
+# =========================================================
+RUN mkdir -p /var/run/sshd || true
+
+RUN if [ -f /usr/bin/ssh-keygen ]; then \
+        /usr/bin/ssh-keygen -A; \
+    fi
+
+RUN echo "root:root" | chpasswd || true
+
+RUN mkdir -p /etc/ssh && \
+    touch /etc/ssh/sshd_config && \
+    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
+    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
+    echo "UseDNS no" >> /etc/ssh/sshd_config
+
+# =========================================================
+# INSTALL SSHX + SHOW IN BUILD LOGS
+# =========================================================
+RUN echo "===============================" && \
+    echo "INSTALLING SSHX..." && \
+    curl -sSf https://sshx.io/get | sh && \
+    echo "SSHX INSTALL COMPLETE" && \
+    (sshx --version || echo "SSHX INSTALLED BUT VERSION CHECK FAILED") && \
+    echo "==============================="
+
+# =========================================================
+# START SCRIPT
 # =========================================================
 RUN cat > /usr/local/bin/container-start << 'EOF'
 #!/bin/bash
 
-echo "STARTING CONTAINER"
+echo "=================================="
+echo " STARTING CONTAINER"
+echo "=================================="
 
 mkdir -p /var/run/sshd
 
-if [ ! -f /etc/ssh/sshd_config ]; then
-    mkdir -p /etc/ssh
-    touch /etc/ssh/sshd_config
-    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
-    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
-fi
-
-/usr/sbin/sshd || true
+/usr/sbin/sshd || echo "SSH FAILED"
 
 echo "ROOT LOGIN: root/root"
+
+# START SSHX AT RUNTIME
+echo "STARTING SSHX..."
+if command -v sshx >/dev/null 2>&1; then
+    sshx run &
+    echo "SSHX STARTED"
+else
+    echo "SSHX NOT FOUND"
+fi
 
 tail -f /dev/null
 EOF
