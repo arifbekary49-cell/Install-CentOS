@@ -10,7 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 STOPSIGNAL SIGRTMIN+3
 
 # =========================================================
-# FIX OLD CENTOS 7 REPOSITORIES (FIXED 404 ISSUE)
+# FIX OLD CENTOS 7 REPOSITORIES
 # =========================================================
 RUN rm -rf /etc/yum.repos.d/* && \
     curl -L \
@@ -113,15 +113,17 @@ RUN yum install -y \
 RUN localedef -i en_US -f UTF-8 en_US.UTF-8 || true
 
 # =========================================================
-# FIX NETWORK (REMOVED /etc/resolv.conf ERROR)
+# FIX NETWORK + DNS (SAFE - DO NOT TOUCH RAILWAY SYSTEM FILES)
 # =========================================================
-# DO NOT TOUCH /etc/resolv.conf (READ-ONLY IN RAILWAY)
 
 # =========================================================
-# FIX SSH SERVER
+# FIX SSH SERVER (FIXED ssh-keygen ERROR)
 # =========================================================
+RUN yum install -y openssh-server openssh-clients || true
+
 RUN mkdir -p /var/run/sshd && \
-    ssh-keygen -A
+    which ssh-keygen || true && \
+    /usr/bin/ssh-keygen -A || true
 
 RUN echo "root:root" | chpasswd
 
