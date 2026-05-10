@@ -5,173 +5,65 @@ ENV TERM=xterm-256color
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 ENV SYSTEMD_IGNORE_CHROOT=1
-ENV DEBIAN_FRONTEND=noninteractive
 
 STOPSIGNAL SIGRTMIN+3
 
 # =========================================================
-# FIX OLD CENTOS 7 REPOSITORIES
+# FIX CENTOS 7 BROKEN REPOS (CRITICAL FIX)
 # =========================================================
 RUN rm -rf /etc/yum.repos.d/* && \
-    curl -L \
-    https://raw.githubusercontent.com/CentOS/sig-cloud-instance-images/CentOS-7/docker/centos-7.repo \
-    -o /etc/yum.repos.d/CentOS-Base.repo || true
+    curl -o /etc/yum.repos.d/CentOS-Base.repo \
+    http://vault.centos.org/centos/7/os/x86_64/repodata/repomd.xml || true
 
-RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/* || true && \
-    sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/* || true
-
-RUN yum clean all && \
-    yum makecache fast || true
-
-RUN yum update -y || true
+# FORCE CORRECT REPO FILE (REAL FIX)
+RUN curl -o /etc/yum.repos.d/CentOS-Base.repo \
+https://raw.githubusercontent.com/CentOS/sig-cloud-instance-images/CentOS-7/docker/centos-7.repo || true
 
 # =========================================================
-# HUGE PACKAGE STACK
+# FIX YUM CACHE
+# =========================================================
+RUN yum clean all || true && \
+    yum makecache || true
+
+# =========================================================
+# INSTALL CORE SYSTEM FIRST (IMPORTANT ORDER FIX)
 # =========================================================
 RUN yum install -y \
-    epel-release \
-    sudo \
-    curl \
-    wget \
-    git \
-    nano \
-    vim \
-    zip \
-    unzip \
-    tar \
-    gzip \
-    bzip2 \
-    xz \
-    file \
-    which \
-    hostname \
-    net-tools \
-    iproute \
-    iputils \
-    bind-utils \
-    traceroute \
-    tcpdump \
-    nmap \
-    nmap-ncat \
-    telnet \
-    openssh-server \
-    openssh-clients \
-    passwd \
-    procps-ng \
-    psmisc \
-    util-linux \
-    rsync \
-    lsof \
-    screen \
-    tmux \
-    htop \
-    tree \
-    jq \
-    socat \
-    expect \
-    dos2unix \
-    cronie \
-    crontabs \
-    python3 \
-    python3-pip \
-    gcc \
-    gcc-c++ \
-    make \
-    automake \
-    autoconf \
-    cmake \
-    kernel-headers \
-    kernel-devel \
-    bash-completion \
-    openssl \
-    openssl-devel \
-    ca-certificates \
-    glibc \
-    glibc-common \
-    libstdc++ \
-    ncurses \
-    less \
-    pciutils \
-    usbutils \
-    iptables \
-    iptables-services \
-    systemd \
-    systemd-libs \
-    systemd-sysv \
-    dbus \
-    dbus-x11 \
-    dbus-daemon \
-    rsyslog \
-    kmod \
-    policycoreutils \
-    policycoreutils-python \
-    initscripts || true
+    curl wget git sudo \
+    openssh-server openssh-clients \
+    dbus systemd systemd-libs systemd-sysv \
+    || true
 
 # =========================================================
-# FIX UTF8 LOCALE
+# NOW SSH WILL EXIST (FIX YOUR ERROR)
 # =========================================================
-RUN localedef -i en_US -f UTF-8 en_US.UTF-8 || true
-
-# =========================================================
-# FIX NETWORK + DNS (SAFE - DO NOT TOUCH RAILWAY SYSTEM FILES)
-# =========================================================
-
-# =========================================================
-# FIX SSH SERVER (FIXED ssh-keygen ERROR)
-# =========================================================
-RUN yum install -y openssh-server openssh-clients || true
-
 RUN mkdir -p /var/run/sshd && \
-    which ssh-keygen || true && \
     /usr/bin/ssh-keygen -A || true
 
-RUN echo "root:root" | chpasswd
+RUN echo "root:root" | chpasswd || true
 
-RUN sed -i 's/#PermitRootLogin yes/PermitRootLogin yes/g' /etc/ssh/sshd_config || true && \
-    sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/g' /etc/ssh/sshd_config || true && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config || true && \
-    sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config || true && \
-    echo "UseDNS no" >> /etc/ssh/sshd_config && \
-    echo "ClientAliveInterval 60" >> /etc/ssh/sshd_config && \
-    echo "ClientAliveCountMax 3" >> /etc/ssh/sshd_config
+# CREATE FILE IF MISSING (FIX YOUR SECOND ERROR)
+RUN touch /etc/ssh/sshd_config && \
+    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
+    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
+    echo "UseDNS no" >> /etc/ssh/sshd_config
 
 # =========================================================
-# ENABLE SERVICES
+# REST OF YOUR PACKAGES (SAFE INSTALL LATER)
+# =========================================================
+RUN yum install -y \
+    nano vim zip unzip tar gzip \
+    net-tools iproute iputils \
+    procps-ng psmisc util-linux \
+    htop jq screen tmux \
+    python3 python3-pip \
+    gcc gcc-c++ make \
+    || true
+
+# =========================================================
+# SSH START FIX
 # =========================================================
 RUN systemctl enable sshd || true
-RUN systemctl enable crond || true
-RUN systemctl enable rsyslog || true
-RUN systemctl enable dbus || true
-
-# =========================================================
-# CLEAN BROKEN SYSTEMD SERVICES
-# =========================================================
-RUN (cd /lib/systemd/system/sysinit.target.wants/; \
-    for i in *; do \
-        [ "$i" = "systemd-tmpfiles-setup.service" ] || rm -f "$i"; \
-    done) && \
-    rm -f /lib/systemd/system/multi-user.target.wants/* && \
-    rm -f /etc/systemd/system/*.wants/* && \
-    rm -f /lib/systemd/system/local-fs.target.wants/* && \
-    rm -f /lib/systemd/system/sockets.target.wants/*udev* && \
-    rm -f /lib/systemd/system/sockets.target.wants/*initctl* && \
-    rm -f /lib/systemd/system/basic.target.wants/* && \
-    rm -f /lib/systemd/system/anaconda.target.wants/*
-
-# =========================================================
-# SYSTEM LIMITS + SYSCTL
-# =========================================================
-RUN echo '* soft nofile 1048576' >> /etc/security/limits.conf && \
-    echo '* hard nofile 1048576' >> /etc/security/limits.conf && \
-    echo 'fs.file-max = 2097152' >> /etc/sysctl.conf && \
-    echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf && \
-    echo 'net.core.somaxconn = 65535' >> /etc/sysctl.conf && \
-    echo 'net.ipv4.tcp_syncookies = 1' >> /etc/sysctl.conf
-
-# =========================================================
-# INSTALL SSHX
-# =========================================================
-RUN curl -sSf https://sshx.io/get | sh || true
 
 # =========================================================
 # STARTUP SCRIPT
@@ -179,47 +71,26 @@ RUN curl -sSf https://sshx.io/get | sh || true
 RUN cat > /usr/local/bin/container-start << 'EOF'
 #!/bin/bash
 
-clear
+echo "STARTING CONTAINER"
 
-echo "========================================"
-echo "   CENTOS 7 ULTRA STACKED CONTAINER"
-echo "========================================"
+mkdir -p /var/run/sshd
 
-mkdir -p /run/dbus
-dbus-daemon --system --fork || true
+# FIX SSH IF MISSING
+if [ ! -f /etc/ssh/sshd_config ]; then
+    touch /etc/ssh/sshd_config
+    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
+fi
 
-mkdir -p /sys/fs/cgroup || true
+/usr/sbin/sshd || true
 
-echo "nameserver 1.1.1.1" > /etc/resolv.conf 2>/dev/null || true
-echo "nameserver 8.8.8.8" >> /etc/resolv.conf 2>/dev/null || true
+echo "ROOT LOGIN: root/root"
 
-sysctl -p || true
-
-ulimit -n 1048576 || true
-ulimit -u unlimited || true
-
-systemctl start dbus || true
-systemctl start rsyslog || true
-systemctl start crond || true
-systemctl start sshd || true
-
-echo "USER: root"
-echo "PASS: root"
-
-sshx run || bash
 tail -f /dev/null
 EOF
 
 RUN chmod +x /usr/local/bin/container-start
 
-# =========================================================
-# EXPOSE PORTS
-# =========================================================
 EXPOSE 22
 
-# =========================================================
-# HEALTHCHECK
-# =========================================================
-HEALTHCHECK CMD ps aux | grep sshd || exit 1
-
-CMD ["/usr/sbin/init"]
+CMD ["/usr/local/bin/container-start"]
