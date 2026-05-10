@@ -185,71 +185,29 @@ echo "========================================"
 echo "   CENTOS 7 ULTRA STACKED CONTAINER"
 echo "========================================"
 
-# FIX DBUS
 mkdir -p /run/dbus
 dbus-daemon --system --fork || true
 
-# FIX CGROUP
 mkdir -p /sys/fs/cgroup || true
 
-# FIX DNS
 echo "nameserver 1.1.1.1" > /etc/resolv.conf
 echo "nameserver 8.8.8.8" >> /etc/resolv.conf
 
-# APPLY SYSCTL
 sysctl -p || true
 
-# ULIMIT
 ulimit -n 1048576 || true
 ulimit -u unlimited || true
 
-# START SERVICES
 systemctl start dbus || true
-systemctl start rsyslog || service rsyslog start || true
-systemctl start crond || service crond start || true
-systemctl start sshd || service sshd start || true
-
-# DEBUG OUTPUT
-echo ""
-echo "========================================"
-echo " NETWORK STATUS"
-echo "========================================"
-
-ip addr || true
-ip route || true
-ping -c 1 1.1.1.1 || true
-
-echo ""
-echo "========================================"
-echo " SYSTEMD STATUS"
-echo "========================================"
-
-systemctl --failed || true
-
-echo ""
-echo "========================================"
-echo " SSH STATUS"
-echo "========================================"
-
-systemctl status sshd || true
-
-echo ""
-echo "========================================"
-echo " LOGIN INFO"
-echo "========================================"
+systemctl start rsyslog || true
+systemctl start crond || true
+systemctl start sshd || true
 
 echo "USER: root"
 echo "PASS: root"
 
-echo ""
-echo "========================================"
-echo " SSHX ACCESS"
-echo "========================================"
-
 sshx run || bash
-
 tail -f /dev/null
-
 EOF
 
 RUN chmod +x /usr/local/bin/container-start
@@ -260,9 +218,8 @@ RUN chmod +x /usr/local/bin/container-start
 EXPOSE 22
 
 # =========================================================
-# SYSTEMD SUPPORT
+# SYSTEMD SUPPORT (NO VOLUME BECAUSE RAILWAY BLOCKS IT)
 # =========================================================
-VOLUME ["/sys/fs/cgroup"]
 
 # =========================================================
 # HEALTHCHECK
