@@ -10,7 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 STOPSIGNAL SIGRTMIN+3
 
 # =========================================================
-# FIX OLD CENTOS 7 REPOSITORIES
+# FIX OLD CENTOS 7 REPOSITORIES (FIXED 404 ISSUE)
 # =========================================================
 RUN rm -rf /etc/yum.repos.d/* && \
     curl -L \
@@ -113,11 +113,9 @@ RUN yum install -y \
 RUN localedef -i en_US -f UTF-8 en_US.UTF-8 || true
 
 # =========================================================
-# FIX NETWORK + DNS
+# FIX NETWORK (REMOVED /etc/resolv.conf ERROR)
 # =========================================================
-RUN rm -f /etc/resolv.conf || true && \
-    echo "nameserver 1.1.1.1" > /etc/resolv.conf && \
-    echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+# DO NOT TOUCH /etc/resolv.conf (READ-ONLY IN RAILWAY)
 
 # =========================================================
 # FIX SSH SERVER
@@ -190,8 +188,8 @@ dbus-daemon --system --fork || true
 
 mkdir -p /sys/fs/cgroup || true
 
-echo "nameserver 1.1.1.1" > /etc/resolv.conf
-echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+echo "nameserver 1.1.1.1" > /etc/resolv.conf 2>/dev/null || true
+echo "nameserver 8.8.8.8" >> /etc/resolv.conf 2>/dev/null || true
 
 sysctl -p || true
 
@@ -216,10 +214,6 @@ RUN chmod +x /usr/local/bin/container-start
 # EXPOSE PORTS
 # =========================================================
 EXPOSE 22
-
-# =========================================================
-# SYSTEMD SUPPORT (NO VOLUME BECAUSE RAILWAY BLOCKS IT)
-# =========================================================
 
 # =========================================================
 # HEALTHCHECK
