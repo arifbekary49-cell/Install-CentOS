@@ -5,7 +5,7 @@ ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
 # =========================================================
-# FIX CENTOS 7 REPO (NO 404 - VULTR CENTOS VAULT)
+# FIX CENTOS REPO (NO 404)
 # =========================================================
 RUN rm -rf /etc/yum.repos.d/* && \
     cat > /etc/yum.repos.d/CentOS-Base.repo << 'EOF'
@@ -14,36 +14,22 @@ name=CentOS-7
 baseurl=http://vault.centos.org/7.9.2009/os/x86_64/
 enabled=1
 gpgcheck=0
-
-[updates]
-name=CentOS-7-Updates
-baseurl=http://vault.centos.org/7.9.2009/updates/x86_64/
-enabled=1
-gpgcheck=0
-
-[extras]
-name=CentOS-7-Extras
-baseurl=http://vault.centos.org/7.9.2009/extras/x86_64/
-enabled=1
-gpgcheck=0
 EOF
 
 # =========================================================
-# YUM FIX
+# CORE PACKAGES
 # =========================================================
 RUN yum clean all || true && yum makecache || true
 
-# =========================================================
-# CORE PACKAGES (STABLE ONLY)
-# =========================================================
 RUN yum install -y \
     curl wget git sudo bash \
     openssh-server openssh-clients \
     net-tools iproute procps-ng \
+    nmap tcpdump traceroute \
     || true
 
 # =========================================================
-# SSH SETUP
+# SSH
 # =========================================================
 RUN mkdir -p /var/run/sshd /etc/ssh && \
     ssh-keygen -A || true
@@ -57,58 +43,105 @@ UseDNS no
 EOF
 
 # =========================================================
-# WEB TERMINAL (GOTTY)
+# WEB TERMINAL
 # =========================================================
 RUN curl -L \
-    https://github.com/yudai/gotty/releases/latest/download/gotty_linux_amd64 \
-    -o /usr/local/bin/gotty && \
-    chmod +x /usr/local/bin/gotty
+    https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64 \
+    -o /usr/local/bin/ttyd && \
+    chmod +x /usr/local/bin/ttyd
 
 # =========================================================
-# FILE MANAGER (FILEBROWSER)
+# FILE MANAGER
 # =========================================================
 RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
 
 # =========================================================
-# SAFE SYSTEMCTL (NO CRASH)
+# SERVICE MANAGER (REAL WORKING systemctl REPLACEMENT)
 # =========================================================
-RUN echo -e '#!/bin/bash\necho "systemctl disabled in container"\nexit 0' > /usr/bin/systemctl && \
-    chmod +x /usr/bin/systemctl
+RUN mkdir -p /opt/services
+
+RUN cat > /usr/bin/systemctl << 'EOF'
+#!/bin/bash
+
+SERVICE="/opt/services/$2.sh"
+
+case "$1" in
+  start)
+    echo "[SERVICE START] $2"
+    bash "$SERVICE" > /dev/null 2>&1 &
+    echo $! > "/tmp/$2.pid"
+    ;;
+  stop)
+    echo "[SERVICE STOP] $2"
+    kill "$(cat /tmp/$2.pid 2>/dev/null)" 2>/dev/null || true
+    ;;
+  status)
+    if pgrep -f "$2" >/dev/null; then
+      echo "$2 RUNNING"
+    else
+      echo "$2 STOPPED"
+    fi
+    ;;
+  *)
+    echo "container systemctl (fake control layer)"
+    ;;
+esac
+EOF
+
+RUN chmod +x /usr/bin/systemctl
 
 # =========================================================
-# START SCRIPT (ALL SERVICES)
+# NET ADMIN SERVICE
+# =========================================================
+RUN cat > /opt/services/netadmin.sh << 'EOF'
+#!/bin/bash
+while true; do
+  echo "===== NETWORK STATUS ====="
+  ip a
+  echo ""
+  ip r
+  echo ""
+  ping -c 1 8.8.8.8
+  sleep 10
+done
+EOF
+
+RUN chmod +x /opt/services/netadmin.sh
+
+# =========================================================
+# START SCRIPT (FULL PANEL)
 # =========================================================
 RUN cat > /start.sh << 'EOF'
 #!/bin/bash
 
 echo "===================================="
-echo "  VPS PANEL STARTING (FIXED)"
+echo " FULL VPS CONTROL PANEL (RAILWAY)"
 echo "===================================="
 
 mkdir -p /var/run/sshd
 
-# START SSH
+# SSH
 /usr/sbin/sshd || true
-echo "SSH READY -> root/root"
+echo "SSH: root/root"
 
-# START FILE MANAGER
+# FILE MANAGER
 filebrowser -r / -p 8081 --no-auth &
-echo "FILE ACCESS -> http://localhost:8081"
+echo "FILE: :8081"
 
-# START WEB TERMINAL
-/usr/local/bin/gotty -p 8080 bash &
-echo "TERMINAL -> http://localhost:8080"
+# TERMINAL
+ttyd -p 8080 bash &
+echo "TERMINAL: :8080"
 
-echo "SYSTEM RUNNING WITHOUT systemd ERRORS"
+# START NET ADMIN SERVICE VIA SYSTEMCTL
+systemctl start netadmin
+
+echo "SYSTEM READY"
 
 tail -f /dev/null
 EOF
 
 RUN chmod +x /start.sh
 
-# =========================================================
-# PORTS
-# =========================================================
 EXPOSE 22 8080 8081
 
 CMD ["/start.sh"]
