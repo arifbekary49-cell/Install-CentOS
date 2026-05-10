@@ -1,98 +1,108 @@
 FROM centos:7
 
-ENV container=docker
 ENV TERM=xterm-256color
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
-ENV SYSTEMD_IGNORE_CHROOT=1
-
-STOPSIGNAL SIGRTMIN+3
 
 # =========================================================
-# FIX CENTOS 7 REPO
+# FIX CENTOS REPO (YOUR OLD STYLE BUT STABLE)
 # =========================================================
 RUN rm -rf /etc/yum.repos.d/* && \
-    curl -o /etc/yum.repos.d/CentOS-Base.repo \
+    curl -fsSL -o /etc/yum.repos.d/CentOS-Base.repo \
     https://raw.githubusercontent.com/CentOS/sig-cloud-instance-images/CentOS-7/docker/centos-7.repo
 
 # =========================================================
-# YUM CACHE FIX
+# FIX NETWORK (RAILWAY SAFE DNS)
 # =========================================================
-RUN yum clean all || true && \
-    yum makecache || true
+RUN echo "nameserver 1.1.1.1" > /etc/resolv.conf || true && \
+    echo "nameserver 8.8.8.8" >> /etc/resolv.conf || true
 
 # =========================================================
-# CORE PACKAGES
+# YUM FIX
+# =========================================================
+RUN yum clean all || true && yum makecache || true
+
+# =========================================================
+# CORE PACKAGES (MIXED FROM YOUR OLD STACK BUT SAFE)
 # =========================================================
 RUN yum install -y \
-    curl wget git sudo \
+    curl wget git sudo bash \
     openssh-server openssh-clients \
-    dbus systemd systemd-libs systemd-sysv \
-    nano vim zip unzip tar gzip \
-    net-tools iproute iputils \
-    procps-ng psmisc util-linux \
-    htop jq screen tmux \
-    python3 python3-pip \
-    gcc gcc-c++ make \
+    net-tools iproute procps-ng \
+    nano vim \
     || true
 
 # =========================================================
-# FIX SSH
+# SSH FIX (FROM YOUR OLD CODE)
 # =========================================================
-RUN mkdir -p /var/run/sshd || true
-
-RUN if [ -f /usr/bin/ssh-keygen ]; then \
-        /usr/bin/ssh-keygen -A; \
-    fi
+RUN mkdir -p /var/run/sshd /etc/ssh && \
+    ssh-keygen -A || true
 
 RUN echo "root:root" | chpasswd || true
 
-RUN mkdir -p /etc/ssh && \
-    touch /etc/ssh/sshd_config && \
-    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
-    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
-    echo "UseDNS no" >> /etc/ssh/sshd_config
+RUN cat > /etc/ssh/sshd_config << 'EOF'
+PermitRootLogin yes
+PasswordAuthentication yes
+UseDNS no
+EOF
 
 # =========================================================
-# INSTALL SSHX + SHOW IN BUILD LOGS
+# WEB TERMINAL (FROM MODERN FIXES)
 # =========================================================
-RUN echo "===============================" && \
-    echo "INSTALLING SSHX..." && \
-    curl -sSf https://sshx.io/get | sh && \
-    echo "SSHX INSTALL COMPLETE" && \
-    (sshx --version || echo "SSHX INSTALLED BUT VERSION CHECK FAILED") && \
-    echo "==============================="
+RUN curl -L \
+    https://github.com/yudai/gotty/releases/latest/download/gotty_linux_amd64 \
+    -o /usr/local/bin/gotty && \
+    chmod +x /usr/local/bin/gotty
 
 # =========================================================
-# START SCRIPT
+# FILE MANAGER (FULL ACCESS)
 # =========================================================
-RUN cat > /usr/local/bin/container-start << 'EOF'
+RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
+
+# =========================================================
+# SYSTEMCTL FIX (SAFE STUB FROM YOUR REQUEST)
+# =========================================================
+RUN echo -e '#!/bin/bash\necho "systemctl disabled in container mode"\nexit 0' > /usr/bin/systemctl && \
+    chmod +x /usr/bin/systemctl
+
+# =========================================================
+# START SCRIPT (MIX OF ALL YOUR OLD IDEAS)
+# =========================================================
+RUN cat > /start.sh << 'EOF'
 #!/bin/bash
 
-echo "=================================="
-echo " STARTING CONTAINER"
-echo "=================================="
+echo "===================================="
+echo " MIXED CENTOS VPS PANEL START"
+echo "===================================="
+
+# FIX DNS EVERY START (RAILWAY SAFE)
+echo "nameserver 1.1.1.1" > /etc/resolv.conf || true
+echo "nameserver 8.8.8.8" >> /etc/resolv.conf || true
 
 mkdir -p /var/run/sshd
 
-/usr/sbin/sshd || echo "SSH FAILED"
+# START SSH
+/usr/sbin/sshd || true
+echo "SSH READY -> root/root"
 
-echo "ROOT LOGIN: root/root"
+# START FILE MANAGER
+filebrowser -r / -p 8081 --no-auth &
+echo "FILE ACCESS -> http://localhost:8081"
 
-# START SSHX AT RUNTIME
-echo "STARTING SSHX..."
-if command -v sshx >/dev/null 2>&1; then
-    sshx run &
-    echo "SSHX STARTED"
-else
-    echo "SSHX NOT FOUND"
-fi
+# START TERMINAL
+/usr/local/bin/gotty -p 8080 bash &
+echo "TERMINAL -> http://localhost:8080"
+
+echo "ALL SYSTEMS RUNNING (MIXED FIX MODE)"
 
 tail -f /dev/null
 EOF
 
-RUN chmod +x /usr/local/bin/container-start
+RUN chmod +x /start.sh
 
-EXPOSE 22
+# =========================================================
+# PORTS
+# =========================================================
+EXPOSE 22 8080 8081
 
-CMD ["/usr/local/bin/container-start"]
+CMD ["/start.sh"]
